@@ -19,6 +19,39 @@ ask() {
 ask 'Install folder [/opt/nftguard]: '
 dest=${answer:-/opt/nftguard}
 case "$dest" in /*) ;; *) echo 'Enter an absolute path.' >&2; exit 1;; esac
+if [ -f "$dest/compose.yaml" ]; then
+    cd "$dest"
+    image=$(docker compose config --images nftguard) || exit 1
+    case "$image" in
+        ghcr.io/theillarion/anti-scan-govno:*) ;;
+        *) echo 'Existing nftguard service does not use the GHCR image. Update it using its existing deployment method.' >&2; exit 1;;
+    esac
+    echo 'Existing nftguard installation found. Checking for an updated image.'
+    container=$(docker compose ps --all --quiet nftguard)
+    case "$container" in
+        *'
+'*) echo 'Multiple nftguard containers found. Update them manually.' >&2; exit 1;;
+    esac
+    current_image=
+    if [ -n "$container" ]; then
+        current_image=$(docker inspect --format '{{.Image}}' "$container")
+    fi
+    docker compose pull nftguard
+    new_image=$(docker image inspect --format '{{.Id}}' "$image")
+    if [ -n "$current_image" ] && [ "$current_image" = "$new_image" ]; then
+        echo 'The installed image is up to date. Nothing to do.'
+        exit 0
+    fi
+    if [ -n "$container" ]; then
+        ask 'An updated image is available. Stop and update nftguard? Configuration and data will be kept. [y/N]: '
+    else
+        ask 'No nftguard container found. Start it using the downloaded image? Configuration and data will be kept. [y/N]: '
+    fi
+    case "$answer" in y|Y|yes|YES) ;; *) echo 'Update cancelled.'; exit 0;; esac
+    docker compose up -d --no-deps nftguard
+    echo 'Update complete. Check logs: docker compose logs -f nftguard'
+    exit 0
+fi
 if [ -e "$dest/.env" ] || [ -e "$dest/compose.yaml" ]; then
     echo 'Config or compose.yaml already exists in this folder. Setup stopped.' >&2
     exit 1
