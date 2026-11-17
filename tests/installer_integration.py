@@ -13,7 +13,6 @@ with tempfile.TemporaryDirectory() as tmp:
 echo "$*" >> "$DOCKER_LOG"
 case "$*" in
   "compose config --images nftguard") echo "${TEST_IMAGE:-ghcr.io/theillarion/anti-scan-govno:latest}" ;;
-  "compose config nftguard") [ "${TEST_HAS_DAC:-1}" = 0 ] || echo '      - DAC_OVERRIDE' ;;
   "compose ps --all --quiet nftguard") echo "${TEST_CONTAINER:-container-id}" ;;
   "compose pull nftguard") [ "${TEST_PULL_FAIL:-0}" = 0 ] || exit 1 ;;
   "inspect --format {{.Image}} container-id") echo "${TEST_OLD_ID:-old-image}" ;;
@@ -57,6 +56,9 @@ cp "/work/$source" "$output"
     assert (root / 'installed' / 'uninstall.sh').exists()
     state_stat = (root / 'installed' / 'state').stat()
     assert (state_stat.st_uid, state_stat.st_gid) == (1001, 27)
+    for path in [root / 'installed', root / 'installed' / '.env',
+                 root / 'installed' / 'compose.yaml', root / 'installed' / 'uninstall.sh']:
+        assert (path.stat().st_uid, path.stat().st_gid) == (1001, 27)
     assert not (root / 'installed' / 'Dockerfile').exists()
     assert 'compose up -d\n' in (root / 'docker.log').read_text()
     assert '--build' not in (root / 'docker.log').read_text()
@@ -106,10 +108,4 @@ cp "/work/$source" "$output"
     assert 'compose up' not in log
     log = repeat_install({'TEST_IMAGE': 'custom/source-build'}, expected_exit=1)
     assert 'compose pull' not in log and 'compose up' not in log
-    old_compose = original_compose.replace('[NET_ADMIN, DAC_OVERRIDE]', '[NET_ADMIN]')
-    compose_file.write_text(old_compose)
-    log = repeat_install({'TEST_HAS_DAC': '0'}, confirm='n', expected_compose=old_compose)
-    assert 'compose up' not in log
-    log = repeat_install({'TEST_HAS_DAC': '0'}, confirm='y')
-    assert 'compose up -d --no-deps nftguard' in log
     print('Installer update: unchanged, cancelled, confirmed, pull failure and non-GHCR installation passed')

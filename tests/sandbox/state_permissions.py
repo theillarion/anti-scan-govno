@@ -1,39 +1,28 @@
-"""Verify nftguard can write state without changing its owner's UID or GID."""
+"""Exercise the production image entrypoint with user- and root-owned state."""
+from pathlib import Path
 import subprocess
 import uuid
 
 volume = f'nftguard-state-test-{uuid.uuid4().hex}'
-image = 'nftguard-sandbox-test'
+image = 'nftguard-product-test'
+probe = Path('tests/sandbox/state_probe.py').resolve()
 
 
-def run(*args, check=True):
-    return subprocess.run(['docker', *args], check=check, capture_output=True, text=True)
+def run(*args):
+    return subprocess.run(['docker', *args], check=True, capture_output=True, text=True)
 
 
 run('volume', 'create', volume)
 try:
-    mount = f'{volume}:/state'
-    run('run', '--rm', '--network', 'none', '-v', mount, image, 'sh', '-c',
-        'chown 1001:27 /state && chmod 755 /state && '
-        'echo old > /state/status.json && chown 1001:27 /state/status.json')
-    script = '''
-import os
-from pathlib import Path
-import nftguard
-state = Path('/state')
-assert (state.stat().st_uid, state.stat().st_gid) == (1001, 27)
-nftguard.atomic_write(state / 'status.json', 'updated')
-nftguard.atomic_write(state / 'new.nft', 'rules')
-assert (state / 'status.json').read_text() == 'updated'
-assert (state.stat().st_uid, state.stat().st_gid) == (1001, 27)
-'''
-    args = ('run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
-            '--cap-add', 'NET_ADMIN', '-v', mount, image, 'python', '-c', script)
-    blocked = run(*args, check=False)
-    assert blocked.returncode != 0 and 'PermissionError' in blocked.stderr, blocked.stderr
-    run('run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
-        '--cap-add', 'NET_ADMIN', '--cap-add', 'DAC_OVERRIDE', '-v', mount,
-        image, 'python', '-c', script)
-    print('State directory: user ownership preserved, container can write with DAC_OVERRIDE')
+    mount = f'{volume}:/var/lib/nftguard'
+    for uid, gid in [(1001, 27), (0, 0)]:
+        run('run', '--rm', '--network', 'none', '--entrypoint', 'sh',
+            '-v', mount, image, '-c', f'chown {uid}:{gid} /var/lib/nftguard && chmod 755 /var/lib/nftguard && rm -f /var/lib/nftguard/status.json')
+        result = run('run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+                     '--cap-add', 'NET_ADMIN', '--cap-add', 'SETUID', '--cap-add', 'SETGID',
+                     '--cap-add', 'SETPCAP', '--security-opt', 'no-new-privileges:true',
+                     '-e', f'EXPECTED_UID={uid}', '-e', f'EXPECTED_GID={gid}',
+                     '-v', mount, '-v', f'{probe}:/usr/local/bin/nftguard:ro', image, 'probe-argument')
+        print(result.stdout.strip())
 finally:
     run('volume', 'rm', volume)

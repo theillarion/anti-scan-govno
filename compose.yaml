@@ -3,7 +3,7 @@ services:
     build: .
     network_mode: host
     cap_drop: [ALL]
-    cap_add: [NET_ADMIN, DAC_OVERRIDE]
+    cap_add: [NET_ADMIN, SETUID, SETGID, SETPCAP]
     security_opt: ["no-new-privileges:true"]
     read_only: true
     tmpfs: ["/tmp"]
