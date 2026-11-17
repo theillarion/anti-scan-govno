@@ -177,9 +177,15 @@ def update(cfg):
     status['last_attempt'] = dt.datetime.now(dt.timezone.utc).isoformat()
     try:
         c4 = networks(fetch('c24_v4', cfg), 4)
-        c6 = networks(fetch('c24_v6', cfg), 6)
+        c6_text = fetch('c24_v6', cfg)
+        c6 = networks(c6_text, 6)
         threshold('c24_v4', c4, 100, 10000)
-        threshold('c24_v6', c6, 1, 1000)
+        empty_sources = []
+        if not c6_text.strip():
+            empty_sources.append('c24_v6')
+            LOG.warning('event=fetch source=c24_v6 reason=empty_list')
+        else:
+            threshold('c24_v6', c6, 1, 1000)
         sources = ['c24_v4', 'c24_v6']
         try:
             anti = networks(fetch('anti', cfg))
@@ -204,7 +210,7 @@ def update(cfg):
         status.update(last_success=dt.datetime.now(dt.timezone.utc).isoformat(), sources=sources,
                       counts={k: len(v) for k, v in sets.items()}, sha256=hashlib.sha256(rules.encode()).hexdigest(),
                       duration_ms=int((time.monotonic() - started) * 1000), last_error=None,
-                      config_hash=config_hash(cfg), dry_run=cfg['dry'])
+                      config_hash=config_hash(cfg), dry_run=cfg['dry'], empty_sources=empty_sources)
         LOG.info('event=apply dry_run=%s counts=%s duration_ms=%s', cfg['dry'], status['counts'], status['duration_ms'])
     except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
         detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) and exc.stderr else str(exc)

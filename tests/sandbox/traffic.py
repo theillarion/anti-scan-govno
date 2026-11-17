@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from unittest import mock
 
 import nftguard as guard
 
@@ -77,4 +78,14 @@ with tempfile.TemporaryDirectory() as state, control, control.makefile('rwb') as
     for blocked, normal in [('172.29.241.12', '172.29.241.2'), ('fd42:6e66:7467::12', 'fd42:6e66:7467::2')]:
         assert not outgoing(blocked), f'VK output passed: {blocked}'
         assert outgoing(normal), f'normal output blocked: {normal}'
+    cfg['vk'] = False
+    sources = {'c24_v4': '\n'.join(f'10.0.{i}.0/24' for i in range(100)) + '\n172.29.241.10',
+               'c24_v6': '',
+               'anti': '\n'.join(f'10.1.{i}.0/24' for i in range(100)) + '\nfd42:6e66:7467::10'}
+    with mock.patch.object(guard, 'fetch', side_effect=lambda name, cfg: sources[name]):
+        assert guard.update(cfg), 'empty C24Be IPv6 file prevented update'
+    assert guard.status_read()['empty_sources'] == ['c24_v6']
+    assert not incoming('172.29.241.10', '172.29.241.3'), 'C24Be IPv4 source passed'
+    assert not incoming('fd42:6e66:7467::10', 'fd42:6e66:7467::3'), 'AntiScanner IPv6 source passed'
+    assert incoming('172.29.241.2', '172.29.241.3'), 'normal source blocked after update'
 print('Sandbox traffic: IPv4/IPv6 input, allowlist and optional output passed')

@@ -61,6 +61,28 @@ class GuardTests(unittest.TestCase):
         self.assertFalse((guard.STATE / 'current.nft').exists())
         self.assertTrue(guard.health(self.cfg))
 
+    def test_empty_ipv6_source_applies_other_lists_and_reports_warning(self):
+        sources = {'c24_v4': '\n'.join(f'10.0.{i}.0/24' for i in range(100)),
+                   'c24_v6': '',
+                   'anti': '\n'.join(f'10.1.{i}.0/24' for i in range(100)) + '\n2001:db8::/32'}
+        with mock.patch.object(guard, 'fetch', side_effect=lambda name, cfg: sources[name]), \
+             mock.patch.object(guard, 'apply') as apply, \
+             self.assertLogs('nftguard', level='WARNING') as logs:
+            self.assertTrue(guard.update(self.cfg))
+        self.assertIn('source=c24_v6 reason=empty_list', logs.output[0])
+        self.assertIn('2001:db8::/32', apply.call_args.args[0])
+        self.assertEqual(guard.status_read()['empty_sources'], ['c24_v6'])
+        self.assertIsNone(guard.status_read()['last_error'])
+
+    def test_invalid_nonempty_ipv6_source_does_not_apply(self):
+        sources = {'c24_v4': '\n'.join(f'10.0.{i}.0/24' for i in range(100)),
+                   'c24_v6': 'not an IPv6 list'}
+        with mock.patch.object(guard, 'fetch', side_effect=lambda name, cfg: sources[name]), \
+             mock.patch.object(guard, 'apply') as apply:
+            self.assertFalse(guard.update(self.cfg))
+        apply.assert_not_called()
+        self.assertIn('c24_v6 count 0', guard.status_read()['last_error'])
+
     def test_stale_and_changed_config_health(self):
         self.assertFalse(guard.fresh({'last_success': (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=27)).isoformat()}))
         old = guard.config_hash(self.cfg)
