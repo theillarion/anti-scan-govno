@@ -16,6 +16,7 @@ services:
       ALLOW_CIDRS: ${ALLOW_CIDRS:-}
       ALLOW_CIDRS6: ${ALLOW_CIDRS6:-}
       DRY_RUN: ${DRY_RUN:-true}
+      BOOT_DELAY_SECONDS: ${BOOT_DELAY_SECONDS:-120}
       HTTP_TIMEOUT: ${HTTP_TIMEOUT:-30s}
       RETRIES: ${RETRIES:-3}
       LOG_LEVEL: ${LOG_LEVEL:-info}

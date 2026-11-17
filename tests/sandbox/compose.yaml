@@ -1,0 +1,33 @@
+services:
+  peer:
+    image: nftguard-sandbox-test
+    build:
+      context: ../..
+      dockerfile: tests/sandbox/Dockerfile
+    cap_add: [NET_ADMIN]
+    command: ["python", "tests/sandbox/peer.py"]
+    networks:
+      sandbox:
+        ipv4_address: 172.29.241.2
+        ipv6_address: fd42:6e66:7467::2
+  test:
+    image: nftguard-sandbox-test
+    build:
+      context: ../..
+      dockerfile: tests/sandbox/Dockerfile
+    cap_add: [NET_ADMIN]
+    environment:
+      PYTHONPATH: /work
+    depends_on: [peer]
+    networks:
+      sandbox:
+        ipv4_address: 172.29.241.3
+        ipv6_address: fd42:6e66:7467::3
+networks:
+  sandbox:
+    internal: true
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.29.241.0/24
+        - subnet: fd42:6e66:7467::/64

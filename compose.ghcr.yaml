@@ -1,0 +1,23 @@
+services:
+  nftguard:
+    image: ghcr.io/theillarion/anti-scan-govno:${NFTGUARD_IMAGE_TAG:-latest}
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    volumes:
+      - ./state:/var/lib/nftguard
+    environment:
+      ENABLE_VK_OUTPUT: ${ENABLE_VK_OUTPUT:-false}
+      UPDATE_AT: ${UPDATE_AT:-03:00}
+      TZ: ${TZ:-Europe/Moscow}
+      ALLOW_CIDRS: ${ALLOW_CIDRS:-}
+      ALLOW_CIDRS6: ${ALLOW_CIDRS6:-}
+      DRY_RUN: ${DRY_RUN:-true}
+      BOOT_DELAY_SECONDS: ${BOOT_DELAY_SECONDS:-120}
+      HTTP_TIMEOUT: ${HTTP_TIMEOUT:-30s}
+      RETRIES: ${RETRIES:-3}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    restart: unless-stopped

@@ -39,9 +39,11 @@ ask 'Create config and start the service? [y/N]: '
 case "$answer" in y|Y|yes|YES) ;; *) echo 'Setup cancelled.'; exit 0;; esac
 mkdir -p "$dest/state"
 base=${NFTGUARD_SOURCE_URL:-https://raw.githubusercontent.com/theillarion/anti-scan-govno/master}
-for file in Dockerfile compose.yaml nftguard.py uninstall.sh; do
-    curl -fsSL --retry 3 "$base/$file" -o "$dest/$file.tmp"
-    mv "$dest/$file.tmp" "$dest/$file"
+for file in compose.ghcr.yaml uninstall.sh; do
+    target=$file
+    [ "$file" != compose.ghcr.yaml ] || target=compose.yaml
+    curl -fsSL --retry 3 "$base/$file" -o "$dest/$target.tmp"
+    mv "$dest/$target.tmp" "$dest/$target"
 done
 chmod +x "$dest/uninstall.sh"
 umask 077
@@ -50,11 +52,12 @@ ENABLE_VK_OUTPUT=$vk
 ALLOW_CIDRS=$allow4
 ALLOW_CIDRS6=$allow6
 DRY_RUN=$dry
+BOOT_DELAY_SECONDS=120
 TZ=Europe/Moscow
 UPDATE_AT=03:00
 CONFIG
 cd "$dest"
-docker compose up -d --build
+docker compose up -d
 printf '\nDone. Check logs: cd %s && docker compose logs -f\n' "$dest"
 if [ "$dry" = true ]; then
     echo 'After checking logs, set DRY_RUN=false in .env and run docker compose up -d.'

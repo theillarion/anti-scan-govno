@@ -47,6 +47,13 @@ with tempfile.TemporaryDirectory() as tmp:
     assert not dest.exists()
     assert subprocess.run(['nft', 'list', 'table', 'inet', 'nftguard'], capture_output=True).returncode != 0
     assert subprocess.run(['nft', 'list', 'table', 'inet', 'unrelated'], capture_output=True).returncode == 0
+    dest.mkdir()
+    (dest / 'compose.yaml').write_text(Path('/work/compose.ghcr.yaml').read_text())
+    subprocess.run(['nft', 'add', 'table', 'inet', 'nftguard'], check=True)
+    run_installer(dest, 'DELETE')
+    assert not dest.exists()
+    assert subprocess.run(['nft', 'list', 'table', 'inet', 'nftguard'], capture_output=True).returncode != 0
+    assert subprocess.run(['nft', 'list', 'table', 'inet', 'unrelated'], capture_output=True).returncode == 0
     commands = (root / 'docker.log').read_text()
     assert 'compose stop nftguard' in commands
     assert 'compose down --rmi local' in commands

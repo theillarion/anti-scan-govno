@@ -21,11 +21,13 @@ if [[ $dest != /* || -L $dest || ! -d $dest ]]; then
     exit 1
 fi
 dest=$(cd -- "$dest" && pwd -P)
-if [[ $dest == / || $dest == /opt || ! -f $dest/compose.yaml || ! -f $dest/nftguard.py || ! -f $dest/Dockerfile ]]; then
+if [[ $dest == / || $dest == /opt || ! -f $dest/compose.yaml ]] || \
+   { [[ ! -f $dest/nftguard.py || ! -f $dest/Dockerfile ]] &&
+     ! grep -Eq '^[[:space:]]*image:[[:space:]]*ghcr[.]io/theillarion/anti-scan-govno(:|[[:space:]]|$)' "$dest/compose.yaml"; }; then
     echo 'This folder does not look like an nftguard install. Removal stopped.' >&2
     exit 1
 fi
-printf 'This will delete the service, its local image, the inet nftguard table, and all files in %s.\n' "$dest" >&2
+printf 'This will delete the service, locally built images, the inet nftguard table, and all files in %s.\n' "$dest" >&2
 printf 'Type DELETE to confirm: ' >&2
 IFS= read -r answer <&3 || exit 1
 if [[ $answer != DELETE ]]; then

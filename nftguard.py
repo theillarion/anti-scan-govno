@@ -65,6 +65,10 @@ def allowed(name, version):
 
 
 def config():
+    delay_text = os.environ.get('BOOT_DELAY_SECONDS', '120')
+    if not re.fullmatch(r'[0-9]+', delay_text):
+        raise ValueError('BOOT_DELAY_SECONDS must be a non-negative integer')
+    boot_delay = int(delay_text)
     clock = os.environ.get('UPDATE_AT', '03:00')
     if not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', clock):
         raise ValueError('UPDATE_AT must be HH:MM')
@@ -81,7 +85,7 @@ def config():
     if level not in ('DEBUG', 'INFO', 'WARN', 'ERROR'):
         raise ValueError('invalid LOG_LEVEL')
     logging.basicConfig(level=level, format='%(asctime)s %(levelname)s %(message)s', stream=sys.stdout)
-    return {'vk': boolean('ENABLE_VK_OUTPUT'), 'dry': boolean('DRY_RUN'), 'clock': clock,
+    return {'vk': boolean('ENABLE_VK_OUTPUT'), 'dry': boolean('DRY_RUN'), 'clock': clock, 'boot_delay': boot_delay,
             'zone': zone, 'timeout': timeout, 'retries': retries,
             'allow4': allowed('ALLOW_CIDRS', 4), 'allow6': allowed('ALLOW_CIDRS6', 6)}
 
@@ -234,6 +238,16 @@ def health(cfg):
     return not status.get('dry_run') and nft('list', 'table', 'inet', 'nftguard', check=False).returncode == 0
 
 
+def wait_for_boot(delay):
+    if not delay:
+        return
+    uptime = float(Path('/proc/uptime').read_text().split()[0])
+    remaining = max(0, delay - uptime)
+    if remaining:
+        LOG.info('event=boot_delay remaining_seconds=%.1f', remaining)
+        time.sleep(remaining)
+
+
 def main():
     cfg = config()
     STATE.mkdir(parents=True, exist_ok=True)
@@ -241,6 +255,8 @@ def main():
         return 0 if health(cfg) else 1
     if sys.argv[1:] not in ([], ['update']):
         raise ValueError('usage: nftguard.py [update|healthcheck]')
+    if not cfg['dry']:
+        wait_for_boot(cfg['boot_delay'])
     if sys.argv[1:] == ['update']:
         return 0 if update(cfg) else 1
     status = status_read()
