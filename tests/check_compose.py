@@ -18,4 +18,5 @@ registry = config('compose.ghcr.yaml')
 assert source.pop('build'), 'source deployment must build the image'
 assert registry.pop('image') == 'ghcr.io/theillarion/anti-scan-govno:test-version'
 assert source == registry, 'source and registry service settings differ'
+assert set(source['cap_add']) == {'NET_ADMIN', 'DAC_OVERRIDE'}
 print('Compose configurations: identical service settings, correct GHCR image tag')

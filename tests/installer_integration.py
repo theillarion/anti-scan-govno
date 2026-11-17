@@ -13,6 +13,7 @@ with tempfile.TemporaryDirectory() as tmp:
 echo "$*" >> "$DOCKER_LOG"
 case "$*" in
   "compose config --images nftguard") echo "${TEST_IMAGE:-ghcr.io/theillarion/anti-scan-govno:latest}" ;;
+  "compose config nftguard") [ "${TEST_HAS_DAC:-1}" = 0 ] || echo '      - DAC_OVERRIDE' ;;
   "compose ps --all --quiet nftguard") echo "${TEST_CONTAINER:-container-id}" ;;
   "compose pull nftguard") [ "${TEST_PULL_FAIL:-0}" = 0 ] || exit 1 ;;
   "inspect --format {{.Image}} container-id") echo "${TEST_OLD_ID:-old-image}" ;;
@@ -33,6 +34,8 @@ cp "/work/$source" "$output"
     if pid == 0:
         os.environ['PATH'] = str(binaries) + ':' + os.environ['PATH']
         os.environ['DOCKER_LOG'] = str(root / 'docker.log')
+        os.environ['SUDO_UID'] = '1001'
+        os.environ['SUDO_GID'] = '27'
         os.execv('/bin/sh', ['sh', '/work/install.sh'])
     answers = [str(root / 'installed'), 'y', '192.0.2.1/32', '2001:db8::1/128', '', 'y']
     transcript = b''
@@ -52,6 +55,8 @@ cp "/work/$source" "$output"
     assert 'ALLOW_CIDRS=192.0.2.1/32' in config and 'ALLOW_CIDRS6=2001:db8::1/128' in config
     assert (root / 'installed' / 'compose.yaml').read_text() == Path('/work/compose.ghcr.yaml').read_text()
     assert (root / 'installed' / 'uninstall.sh').exists()
+    state_stat = (root / 'installed' / 'state').stat()
+    assert (state_stat.st_uid, state_stat.st_gid) == (1001, 27)
     assert not (root / 'installed' / 'Dockerfile').exists()
     assert 'compose up -d\n' in (root / 'docker.log').read_text()
     assert '--build' not in (root / 'docker.log').read_text()
@@ -63,7 +68,7 @@ cp "/work/$source" "$output"
     original_compose = compose_file.read_text()
     original_config = (root / 'installed' / '.env').read_text()
 
-    def repeat_install(env, confirm=None, expected_exit=0):
+    def repeat_install(env, confirm=None, expected_exit=0, expected_compose=None):
         (root / 'docker.log').write_text('')
         pid, master = pty.fork()
         if pid == 0:
@@ -86,7 +91,7 @@ cp "/work/$source" "$output"
         _, status = os.waitpid(pid, 0)
         os.close(master)
         assert os.waitstatus_to_exitcode(status) == expected_exit
-        assert compose_file.read_text() == original_compose
+        assert compose_file.read_text() == (original_compose if expected_compose is None else expected_compose)
         assert (root / 'installed' / '.env').read_text() == original_config
         assert state_file.read_text() == 'keep state'
         return (root / 'docker.log').read_text()
@@ -101,4 +106,10 @@ cp "/work/$source" "$output"
     assert 'compose up' not in log
     log = repeat_install({'TEST_IMAGE': 'custom/source-build'}, expected_exit=1)
     assert 'compose pull' not in log and 'compose up' not in log
+    old_compose = original_compose.replace('[NET_ADMIN, DAC_OVERRIDE]', '[NET_ADMIN]')
+    compose_file.write_text(old_compose)
+    log = repeat_install({'TEST_HAS_DAC': '0'}, confirm='n', expected_compose=old_compose)
+    assert 'compose up' not in log
+    log = repeat_install({'TEST_HAS_DAC': '0'}, confirm='y')
+    assert 'compose up -d --no-deps nftguard' in log
     print('Installer update: unchanged, cancelled, confirmed, pull failure and non-GHCR installation passed')

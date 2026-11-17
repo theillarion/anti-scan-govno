@@ -18,6 +18,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 python3 tests/check_compose.py
 compose build
+python3 tests/sandbox/state_permissions.py
 compose run --rm --no-deps -v "$coverage_data:/coverage-data" -e COVERAGE_FILE=/coverage-data/.coverage test \
     coverage run --parallel-mode -m unittest discover -s tests -p 'test_*.py'
 compose run --rm --no-deps test python tests/installer_integration.py

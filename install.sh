@@ -48,6 +48,17 @@ if [ -f "$dest/compose.yaml" ]; then
         ask 'No nftguard container found. Start it using the downloaded image? Configuration and data will be kept. [y/N]: '
     fi
     case "$answer" in y|Y|yes|YES) ;; *) echo 'Update cancelled.'; exit 0;; esac
+    if ! docker compose config nftguard | grep -Eq '^[[:space:]]*-[[:space:]]*DAC_OVERRIDE[[:space:]]*$'; then
+        if ! grep -Eq '^[[:space:]]*cap_add:[[:space:]]*\[NET_ADMIN\][[:space:]]*$' compose.yaml; then
+            echo 'Add DAC_OVERRIDE to the nftguard cap_add list in compose.yaml, then retry the update.' >&2
+            exit 1
+        fi
+        tmp_compose="compose.yaml.tmp.$$"
+        cp -p compose.yaml "$tmp_compose"
+        sed 's/^\([[:space:]]*cap_add:[[:space:]]*\)\[NET_ADMIN\][[:space:]]*$/\1[NET_ADMIN, DAC_OVERRIDE]/' compose.yaml > "$tmp_compose"
+        mv "$tmp_compose" compose.yaml
+        echo 'Enabled DAC_OVERRIDE so nftguard can write state without changing its owner.'
+    fi
     docker compose up -d --no-deps nftguard
     echo 'Update complete. Check logs: docker compose logs -f nftguard'
     exit 0
@@ -70,7 +81,15 @@ ask 'Start in dry-run mode (do not apply rules)? [Y/n]: '
 case "$answer" in n|N|no|NO) dry=false;; *) dry=true;; esac
 ask 'Create config and start the service? [y/N]: '
 case "$answer" in y|Y|yes|YES) ;; *) echo 'Setup cancelled.'; exit 0;; esac
-mkdir -p "$dest/state"
+if [ ! -e "$dest/state" ]; then
+    mkdir -p "$dest/state"
+    if [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
+        case "$SUDO_UID:$SUDO_GID" in
+            *[!0-9:]*) echo 'Invalid sudo user or group ID.' >&2; exit 1;;
+        esac
+        chown "$SUDO_UID:$SUDO_GID" "$dest/state"
+    fi
+fi
 base=${NFTGUARD_SOURCE_URL:-https://raw.githubusercontent.com/theillarion/anti-scan-govno/master}
 for file in compose.ghcr.yaml uninstall.sh; do
     target=$file
