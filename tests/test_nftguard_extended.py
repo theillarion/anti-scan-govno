@@ -73,7 +73,7 @@ class ExtendedTests(unittest.TestCase):
              mock.patch.object(guard, 'apply') as apply:
             self.assertTrue(guard.update(self.cfg))
             self.assertTrue((self.state / 'current.nft').exists())
-            self.assertIn('vk_v4', guard.status_read()['counts'])
+            self.assertIn('external_out_v4', guard.status_read()['counts'])
             apply.assert_called_once()
         failure = subprocess.CalledProcessError(1, ['nft'], stderr='bad rules')
         with mock.patch.object(guard, 'fetch', side_effect=lambda name, cfg: sources[name]), \

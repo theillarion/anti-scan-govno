@@ -9,6 +9,8 @@ services:
     tmpfs: ["/tmp"]
     volumes:
       - ./state:/var/lib/nftguard
+      - ./custom:/etc/nftguard/custom:ro
+      - ./config:/etc/nftguard-sources:ro
     environment:
       ENABLE_VK_OUTPUT: ${ENABLE_VK_OUTPUT:-false}
       UPDATE_AT: ${UPDATE_AT:-03:00}

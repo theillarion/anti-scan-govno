@@ -1,5 +1,7 @@
 .env
+.venv/
 state/
+custom/
 __pycache__/
 *.pyc
 .coverage

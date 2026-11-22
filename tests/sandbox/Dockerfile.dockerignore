@@ -1,6 +1,7 @@
 .git
 .env
 state
+custom
 __pycache__
 *.pyc
 .coverage

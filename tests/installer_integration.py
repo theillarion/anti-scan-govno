@@ -22,7 +22,7 @@ esac
     # Implement the downloader without depending on shell argument ordering.
     (binaries / 'curl').write_text('''#!/bin/sh
 while [ "$#" -gt 0 ]; do
-  case "$1" in */compose.ghcr.yaml|*/uninstall.sh) source=${1##*/};; -o) shift; output=$1;; esac
+  case "$1" in */compose.ghcr.yaml|*/uninstall.sh) source=${1##*/};; */config/sources.yaml) source=config/sources.yaml;; -o) shift; output=$1;; esac
   shift
 done
 cp "/work/$source" "$output"
@@ -56,11 +56,13 @@ cp "/work/$source" "$output"
     assert (root / 'installed' / 'uninstall.sh').exists()
     state_stat = (root / 'installed' / 'state').stat()
     assert (state_stat.st_uid, state_stat.st_gid) == (1001, 27)
-    for path in [root / 'installed', root / 'installed' / '.env',
+    for path in [root / 'installed', root / 'installed' / 'custom', root / 'installed' / 'config',
+                 root / 'installed' / 'config' / 'sources.yaml', root / 'installed' / '.env',
                  root / 'installed' / 'compose.yaml', root / 'installed' / 'uninstall.sh']:
         assert (path.stat().st_uid, path.stat().st_gid) == (1001, 27)
     assert not (root / 'installed' / 'Dockerfile').exists()
     assert 'compose up -d\n' in (root / 'docker.log').read_text()
+    assert (root / 'docker.log').read_text().index('compose pull nftguard') < (root / 'docker.log').read_text().index('compose up -d')
     assert '--build' not in (root / 'docker.log').read_text()
     print('Interactive installer: answers, downloaded files and configuration passed')
 
@@ -69,6 +71,9 @@ cp "/work/$source" "$output"
     compose_file = root / 'installed' / 'compose.yaml'
     original_compose = compose_file.read_text()
     original_config = (root / 'installed' / '.env').read_text()
+    sources_file = root / 'installed' / 'config' / 'sources.yaml'
+    sources_file.write_text(sources_file.read_text() + '\n# User configuration\n')
+    original_sources = sources_file.read_text()
 
     def repeat_install(env, confirm=None, expected_exit=0, expected_compose=None):
         (root / 'docker.log').write_text('')
@@ -95,6 +100,7 @@ cp "/work/$source" "$output"
         assert os.waitstatus_to_exitcode(status) == expected_exit
         assert compose_file.read_text() == (original_compose if expected_compose is None else expected_compose)
         assert (root / 'installed' / '.env').read_text() == original_config
+        assert sources_file.read_text() == original_sources
         assert state_file.read_text() == 'keep state'
         return (root / 'docker.log').read_text()
 

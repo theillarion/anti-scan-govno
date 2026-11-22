@@ -85,12 +85,26 @@ if [ ! -e "$dest/state" ]; then
     mkdir -p "$dest/state"
     [ -z "$owner" ] || chown "$owner" "$dest/state"
 fi
+if [ ! -e "$dest/custom" ]; then
+    mkdir -p "$dest/custom"
+    [ -z "$owner" ] || chown "$owner" "$dest/custom"
+fi
+if [ ! -e "$dest/config" ]; then
+    mkdir -p "$dest/config"
+    [ -z "$owner" ] || chown "$owner" "$dest/config"
+fi
 base=${NFTGUARD_SOURCE_URL:-https://raw.githubusercontent.com/theillarion/anti-scan-govno/master}
-for file in compose.ghcr.yaml uninstall.sh; do
+for file in compose.ghcr.yaml uninstall.sh config/sources.yaml; do
     target=$file
     [ "$file" != compose.ghcr.yaml ] || target=compose.yaml
+    if [ "$file" = config/sources.yaml ] && [ -e "$dest/$target" ]; then
+        continue
+    fi
     curl -fsSL --retry 3 "$base/$file" -o "$dest/$target.tmp"
     mv "$dest/$target.tmp" "$dest/$target"
+    if [ "$file" = config/sources.yaml ] && [ -n "$owner" ]; then
+        chown "$owner" "$dest/$target"
+    fi
 done
 chmod +x "$dest/uninstall.sh"
 umask 077
@@ -107,6 +121,7 @@ if [ -n "$owner" ]; then
     chown "$owner" "$dest/compose.yaml" "$dest/uninstall.sh" "$dest/.env"
 fi
 cd "$dest"
+docker compose pull nftguard
 docker compose up -d
 printf '\nDone. Check logs: cd %s && docker compose logs -f\n' "$dest"
 if [ "$dry" = true ]; then

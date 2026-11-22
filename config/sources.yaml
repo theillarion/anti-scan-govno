@@ -1,0 +1,40 @@
+# Each source can use format: txt or nftables and direction: input or output.
+# Missing enabled_when means the source is always enabled.
+sources:
+  - name: c24_v4
+    url: https://raw.githubusercontent.com/C24Be/AS_Network_List/main/blacklists/blacklist-v4.txt
+    format: txt
+    direction: input
+    ip_version: 4
+    required: true
+    min_entries: 100
+    max_entries: 10000
+
+  - name: c24_v6
+    url: https://raw.githubusercontent.com/C24Be/AS_Network_List/main/blacklists/blacklist-v6.txt
+    format: txt
+    direction: input
+    ip_version: 6
+    required: true
+    allow_empty: true
+    min_entries: 1
+    max_entries: 1000
+
+  - name: anti
+    url: https://gist.githubusercontent.com/sngvy/07cee7ac810c9d222fbebddff8c1d1b8/raw/blacklist.txt
+    format: txt
+    direction: input
+    required: false
+    min_entries: 100
+    max_entries: 50000
+
+  - name: vk
+    url: https://raw.githubusercontent.com/C24Be/AS_Network_List/main/blacklists/blacklist-vk.txt
+    format: txt
+    direction: output
+    required: true
+    enabled_when: ENABLE_VK_OUTPUT
+    min_ipv4: 10
+    max_ipv4: 500
+    min_ipv6: 0
+    max_ipv6: 100

@@ -34,7 +34,7 @@ class GuardTests(unittest.TestCase):
         self.assertLess(rules.index('192.0.2.1/32'), rules.index('@src_v4 drop'))
         self.assertNotIn('chain output', rules)
         self.cfg['vk'] = True
-        sets.update(vk_v4=set(), vk_v6=set())
+        sets.update(external_out_v4=set(), external_out_v6=set())
         self.assertIn('chain output', guard.render(sets, self.cfg))
 
     def test_invalid_required_source_keeps_current(self):

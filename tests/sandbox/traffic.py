@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from unittest import mock
 
+import yaml
 import nftguard as guard
 
 
@@ -50,13 +51,15 @@ else:
 
 with tempfile.TemporaryDirectory() as state, control, control.makefile('rwb') as stream:
     guard.STATE = Path(state)
+    guard.CUSTOM_DIR = Path(state) / 'custom'
+    guard.CUSTOM_DIR.mkdir()
     cfg = guard.config()
     cfg['allow4'] = guard.networks('172.29.241.11')
     cfg['allow6'] = guard.networks('fd42:6e66:7467::11')
     sets = {'src_v4': guard.networks('172.29.241.10 172.29.241.11'.replace(' ', '\n')),
             'src_v6': guard.networks('fd42:6e66:7467::10\nfd42:6e66:7467::11'),
-            'vk_v4': guard.networks('172.29.241.12'),
-            'vk_v6': guard.networks('fd42:6e66:7467::12')}
+            'external_out_v4': guard.networks('172.29.241.12'),
+            'external_out_v6': guard.networks('fd42:6e66:7467::12')}
 
     def incoming(source, destination):
         stream.write(json.dumps({'source': source, 'destination': destination}).encode() + b'\n')
@@ -64,7 +67,8 @@ with tempfile.TemporaryDirectory() as state, control, control.makefile('rwb') as
         return json.loads(stream.readline())
 
     cfg['vk'] = False
-    guard.apply(guard.render(sets, cfg))
+    no_output = {name: values for name, values in sets.items() if not name.startswith('external_out_')}
+    guard.apply(guard.render(no_output, cfg))
     for blocked, allowed, normal, target, output in [
         ('172.29.241.10', '172.29.241.11', '172.29.241.2', '172.29.241.3', '172.29.241.12'),
         ('fd42:6e66:7467::10', 'fd42:6e66:7467::11', 'fd42:6e66:7467::2', 'fd42:6e66:7467::3', 'fd42:6e66:7467::12'),
@@ -88,4 +92,45 @@ with tempfile.TemporaryDirectory() as state, control, control.makefile('rwb') as
     assert not incoming('172.29.241.10', '172.29.241.3'), 'C24Be IPv4 source passed'
     assert not incoming('fd42:6e66:7467::10', 'fd42:6e66:7467::3'), 'AntiScanner IPv6 source passed'
     assert incoming('172.29.241.2', '172.29.241.3'), 'normal source blocked after update'
+    for filename, value in [('input-v4.txt', '172.29.241.10\n172.29.241.11'),
+                            ('input-v6.txt', 'fd42:6e66:7467::10\nfd42:6e66:7467::11'),
+                            ('output-v4.txt', '172.29.241.11'),
+                            ('output-v6.txt', 'fd42:6e66:7467::11')]:
+        (guard.CUSTOM_DIR / filename).write_text(value + '\n')
+    with mock.patch.object(guard, 'fetch', side_effect=lambda name, cfg: sources[name]):
+        assert guard.update(cfg), 'custom lists update failed'
+    for blocked, allowed, normal, target in [
+        ('172.29.241.10', '172.29.241.11', '172.29.241.2', '172.29.241.3'),
+        ('fd42:6e66:7467::10', 'fd42:6e66:7467::11', 'fd42:6e66:7467::2', 'fd42:6e66:7467::3'),
+    ]:
+        assert not incoming(blocked, target), f'custom input passed: {blocked}'
+        assert incoming(allowed, target), f'input allowlist blocked: {allowed}'
+        assert not outgoing(allowed), f'custom output passed: {allowed}'
+        assert outgoing(normal), f'normal output blocked: {normal}'
+    previous = guard.nft('list', 'table', 'inet', 'nftguard').stdout
+    (guard.CUSTOM_DIR / 'output-v4.txt').write_text('invalid\n')
+    assert not guard.update(cfg), 'invalid custom list accepted'
+    assert guard.nft('list', 'table', 'inet', 'nftguard').stdout == previous
+    for path in guard.CUSTOM_DIR.iterdir():
+        path.unlink()
+    source_file = Path(state) / 'sources.yaml'
+    source_file.write_text(yaml.safe_dump({'sources': [
+        {'name': 'incoming', 'url': 'https://example.test/list.nft', 'format': 'nftables', 'direction': 'input'},
+        {'name': 'outgoing', 'url': 'https://example.test/list.txt', 'format': 'txt', 'direction': 'output'},
+    ]}))
+    with mock.patch.object(guard, 'SOURCES_FILE', source_file):
+        cfg['sources'] = guard.load_sources()
+    data = {'incoming': 'table inet filter { set blocked { elements = { 172.29.241.10, 172.29.241.11, '
+                        'fd42:6e66:7467::10, fd42:6e66:7467::11 } } }',
+            'outgoing': '172.29.241.11\nfd42:6e66:7467::11\n'}
+    with mock.patch.object(guard, 'fetch', side_effect=lambda name, cfg: data[name]):
+        assert guard.update(cfg), 'configured external sources update failed'
+    for blocked, allowed, normal, target in [
+        ('172.29.241.10', '172.29.241.11', '172.29.241.2', '172.29.241.3'),
+        ('fd42:6e66:7467::10', 'fd42:6e66:7467::11', 'fd42:6e66:7467::2', 'fd42:6e66:7467::3'),
+    ]:
+        assert not incoming(blocked, target), f'nftables source input passed: {blocked}'
+        assert incoming(allowed, target), f'input allowlist blocked: {allowed}'
+        assert not outgoing(allowed), f'text source output passed: {allowed}'
+        assert outgoing(normal), f'normal output blocked: {normal}'
 print('Sandbox traffic: IPv4/IPv6 input, allowlist and optional output passed')

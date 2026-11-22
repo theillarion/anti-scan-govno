@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory() as state:
     subprocess.run(['nft', 'add', 'table', 'inet', 'unrelated'], check=True)
     assert g.update(cfg)
     first = g.nft('list', 'table', 'inet', 'nftguard').stdout
-    assert 'vk_v4' in first and 'vk_v6' in first and 'src_v6' in first
+    assert 'external_out_v4' in first and 'external_out_v6' in first and 'src_v6' in first
     assert '195.209.120.1' in first
     assert g.health(cfg)
     assert g.update(cfg)
@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory() as state:
     cfg['vk'] = False
     assert not g.health(cfg)
     assert g.update(cfg)
-    assert 'vk_v4' not in g.nft('list', 'table', 'inet', 'nftguard').stdout
+    assert 'external_out_v4' not in g.nft('list', 'table', 'inet', 'nftguard').stdout
     saved = (g.STATE / 'current.nft').read_text()
     g.nft('delete', 'table', 'inet', 'nftguard')
     g.apply(saved)
